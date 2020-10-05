@@ -2,6 +2,8 @@ certs/
 certs_flat/
 data/
 
+.idea/
+
 # Python ignores
 __pycache__/
 *.py[cod]
