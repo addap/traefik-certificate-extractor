@@ -24,36 +24,25 @@ class Handler(FileSystemEventHandler):
     def handle_file(self, file):
         # Read JSON file
         data = json.loads(open(file).read())
+        data = data['mytlschallenge']
 
-        # Determine ACME version
-        try:
-            acme_version = 2 if 'acme-v02' in data['Account']['Registration']['uri'] else 1
-        except TypeError:
-            if 'DomainsCertificate' in data:
-                acme_version = 1
-            else:
-                acme_version = 2
+        # We always use acme v2
+        if not ('acme-v02' in data['Account']['Registration']['uri']):
+            raise ValueError("Only acme v2 supported")
 
-        # Find certificates
-        if acme_version == 1:
-            certs = data['DomainsCertificate']['Certs']
-        elif acme_version == 2:
-            certs = data['Certificates']
+        certs = data['Certificates']
 
         print('Certificate storage contains ' + str(len(certs)) + ' certificates')
 
         # Loop over all certificates
         for c in certs:
-            if acme_version == 1:
-                name = c['Certificate']['Domain']
-                privatekey = c['Certificate']['PrivateKey']
-                fullchain = c['Certificate']['Certificate']
-                sans = c['Domains']['SANs']
-            elif acme_version == 2:
-                name = c['Domain']['Main']
-                privatekey = c['Key']
-                fullchain = c['Certificate']
-                sans = c['Domain']['SANs']
+            name = c['domain']['main']
+            privatekey = c['key']
+            fullchain = c['certificate']
+            # try:
+            #     sans = c['domain']['SANs']
+            # except KeyError:
+            #     sans = None
 
             # Decode private key, certificate and chain
             privatekey = b64decode(privatekey).decode('utf-8')
@@ -83,30 +72,20 @@ class Handler(FileSystemEventHandler):
             with open(directory + 'fullchain.pem', 'w') as f:
                 f.write(fullchain)
 
-            # Write private key, certificate and chain to flat files
-            directory = 'certs_flat/'
+            # if sans:
+            #     for name in sans:
+            #         with open(directory + name + '.key', 'w') as f:
+            #             f.write(privatekey)
+            #         with open(directory + name + '.crt', 'w') as f:
+            #             f.write(fullchain)
+            #         with open(directory + name + '.chain.pem', 'w') as f:
+            #             f.write(chain)
 
-            with open(directory + name + '.key', 'w') as f:
-                f.write(privatekey)
-            with open(directory + name + '.crt', 'w') as f:
-                f.write(fullchain)
-            with open(directory + name + '.chain.pem', 'w') as f:
-                f.write(chain)
-
-            if sans:
-                for name in sans:
-                    with open(directory + name + '.key', 'w') as f:
-                        f.write(privatekey)
-                    with open(directory + name + '.crt', 'w') as f:
-                        f.write(fullchain)
-                    with open(directory + name + '.chain.pem', 'w') as f:
-                        f.write(chain)
-
-            print('Extracted certificate for: ' + name + (', ' + ', '.join(sans) if sans else ''))
+            print('Extracted certificate for: ' + name) # + (', ' + ', '.join(sans) if sans else ''))
 
 if __name__ == "__main__":
     # Determine path to watch
-    path = sys.argv[1] if len(sys.argv) > 1 else './data'
+    path = './data'
 
     # Create output directories if it doesn't exist
     try:
@@ -131,7 +110,7 @@ if __name__ == "__main__":
             print('Certificate storage found (' + os.path.basename(file) + ')')
             event_handler.handle_file(file)
     except Exception as e:
-        print(e)
+        print(f'Error: {e}')
 
     # Register the directory to watch
     observer.schedule(event_handler, path)
